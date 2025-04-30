@@ -1,0 +1,183 @@
+openapi: 3.0.0
+info:
+  title: Person API Service
+  version: 1.0.0
+  description: Node.js REST API for Person management with SQLite and MongoDB
+servers:
+  - url: /
+paths:
+  /persons:
+    get:
+      summary: List all persons
+      responses:
+        '200':
+          description: List of persons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonOut'
+    post:
+      summary: Create a new person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonCreate'
+      responses:
+        '201':
+          description: Person created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonOut'
+  /persons/{id}:
+    get:
+      summary: Get person by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Person found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonOut'
+        '404':
+          description: Not found
+    put:
+      summary: Update person by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonUpdate'
+      responses:
+        '200':
+          description: Person updated
+        '404':
+          description: Not found
+    delete:
+      summary: Delete person by ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Person deleted
+        '404':
+          description: Not found
+  /search:
+    get:
+      summary: Search persons by name
+      parameters:
+        - in: query
+          name: first_name
+          schema:
+            type: string
+        - in: query
+          name: last_name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of matching persons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonOut'
+  /citystate:
+    get:
+      summary: List persons by city and state
+      parameters:
+        - in: query
+          name: city
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: state
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of matching persons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonOut'
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  backend:
+                    type: string
+                  status:
+                    type: string
+components:
+  schemas:
+    Address:
+      type: object
+      properties:
+        address_line1:
+          type: string
+        address_line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zip:
+          type: string
+    PersonBase:
+      type: object
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        age:
+          type: integer
+        address:
+          $ref: '#/components/schemas/Address'
+    PersonCreate:
+      allOf:
+        - $ref: '#/components/schemas/PersonBase'
+    PersonUpdate:
+      allOf:
+        - $ref: '#/components/schemas/PersonBase'
+    PersonOut:
+      allOf:
+        - $ref: '#/components/schemas/PersonBase'
+        - type: object
+          properties:
+            id:
+              type: string

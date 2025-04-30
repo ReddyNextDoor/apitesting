@@ -1,0 +1,44 @@
+services:
+  mongo:
+    platform: linux/amd64
+    image: mongo:8.0
+    container_name: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=superuser
+      - MONGO_INITDB_ROOT_PASSWORD=supersecret
+    volumes:
+      - mongo_data:/data/db
+    profiles: [mongo]
+
+  java_api:
+    platform: linux/amd64
+    build: .
+    image: person_api_service_java_api_mongo
+    ports:
+      - "8000:8000"
+    environment:
+      - PERSON_REPO_BACKEND=mongo
+      - SPRING_PROFILES_ACTIVE=mongo
+      - SPRING_DATA_MONGODB_URI=mongodb://superuser:supersecret@mongo:27017/person_db?authSource=admin
+    depends_on:
+      - mongo
+    profiles: [mongo]
+    command: ["java", "-jar", "target/person-api-service.jar"]
+
+  java_api_sqlite:
+    platform: linux/amd64
+    build: .
+    image: person_api_service_java_api_sqlite
+    ports:
+      - "8000:8000"
+    environment:
+      - PERSON_REPO_BACKEND=sqlite
+      - SPRING_PROFILES_ACTIVE=sqlite
+    profiles: [sqlite]
+    command: ["java", "-jar", "target/person-api-service.jar"]
+
+volumes:
+  mongo_data:

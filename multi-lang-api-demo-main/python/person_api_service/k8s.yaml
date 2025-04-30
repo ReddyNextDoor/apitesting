@@ -1,0 +1,132 @@
+# --- SQLite API ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: person-api-service-sqlite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: person-api-service-sqlite
+  template:
+    metadata:
+      labels:
+        app: person-api-service-sqlite
+    spec:
+      containers:
+        - name: person-api-service
+          image: person_api_service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PERSON_REPO_BACKEND
+              value: "sqlite"
+          volumeMounts:
+            - name: db-volume
+              mountPath: /app/db
+      volumes:
+        - name: db-volume
+          hostPath:
+            path: /tmp/person_api_service_db
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: person-api-service-sqlite
+spec:
+  selector:
+    app: person-api-service-sqlite
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30080
+  type: NodePort
+---
+# --- MongoDB ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:8.0
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: "superuser"
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: "supersecret"
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+      volumes:
+        - name: mongo-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  selector:
+    app: mongo
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+  type: ClusterIP
+---
+# --- Mongo API ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: person-api-service-mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: person-api-service-mongo
+  template:
+    metadata:
+      labels:
+        app: person-api-service-mongo
+    spec:
+      containers:
+        - name: person-api-service
+          image: person_api_service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PERSON_REPO_BACKEND
+              value: "mongo"
+            - name: MONGO_URI
+              value: "mongodb://superuser:supersecret@mongo:27017/person_db?authSource=admin"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: person-api-service-mongo
+spec:
+  selector:
+    app: person-api-service-mongo
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30081
+  type: NodePort

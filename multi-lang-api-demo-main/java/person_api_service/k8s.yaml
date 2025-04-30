@@ -1,0 +1,158 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:8.0
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: superuser
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: supersecret
+          volumeMounts:
+            - name: mongo-data
+              mountPath: /data/db
+      volumes:
+        - name: mongo-data
+          persistentVolumeClaim:
+            claimName: mongo-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+spec:
+  selector:
+    app: mongo
+  ports:
+    - protocol: TCP
+      port: 27080
+      targetPort: 27017
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-person-api-mongo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-person-api-mongo
+  template:
+    metadata:
+      labels:
+        app: java-person-api-mongo
+    spec:
+      containers:
+        - name: java-person-api-mongo
+          image: person_api_service_java_api_mongo:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PERSON_REPO_BACKEND
+              value: mongo
+            - name: SPRING_PROFILES_ACTIVE
+              value: mongo
+            - name: SPRING_DATA_MONGODB_URI
+              value: mongodb://superuser:supersecret@mongo:27017/person_db?authSource=admin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-person-api-mongo
+spec:
+  type: NodePort
+  selector:
+    app: java-person-api-mongo
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30081
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-person-api-sqlite
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-person-api-sqlite
+  template:
+    metadata:
+      labels:
+        app: java-person-api-sqlite
+    spec:
+      containers:
+        - name: java-person-api-sqlite
+          image: person_api_service_java_api_sqlite:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PERSON_REPO_BACKEND
+              value: sqlite
+            - name: SPRING_PROFILES_ACTIVE
+              value: sqlite
+          volumeMounts:
+            - name: db-volume
+              mountPath: /app/db
+      volumes:
+        - name: db-volume
+          hostPath:
+            path: /tmp/java_person_api_db
+            type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-person-api-sqlite
+spec:
+  type: NodePort
+  selector:
+    app: java-person-api-sqlite
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
+      nodePort: 30080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-person-api
+spec:
+  selector:
+    app: java-person-api
+  ports:
+    - protocol: TCP
+      port: 8000
+      targetPort: 8000
