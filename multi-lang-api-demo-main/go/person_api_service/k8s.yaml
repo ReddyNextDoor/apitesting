@@ -1,0 +1,180 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-pvc-go
+spec:
+  accessModes:
+    - ReadWriteOnce # Suitable for a single MongoDB pod
+  resources:
+    requests:
+      storage: 1Gi # Adjust storage size as needed
+  # storageClassName: standard # Uncomment and specify if you have a specific storage class
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-deployment-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-go
+  template:
+    metadata:
+      labels:
+        app: mongo-go
+    spec:
+      containers:
+        - name: mongo
+          image: mongo:6
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-storage-go
+              mountPath: /data/db
+          # Optional: Add MONGO_INITDB_ROOT_USERNAME and MONGO_INITDB_ROOT_PASSWORD here
+          # env:
+          #   - name: MONGO_INITDB_ROOT_USERNAME
+          #     value: "admin" # Consider using Secrets for credentials
+          #   - name: MONGO_INITDB_ROOT_PASSWORD
+          #     value: "password"
+          #   - name: MONGO_INITDB_DATABASE
+          #     value: "person_k8s_db_go"
+      volumes:
+        - name: mongo-storage-go
+          persistentVolumeClaim:
+            claimName: mongo-pvc-go
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-service-go # Internal service name for MongoDB
+spec:
+  selector:
+    app: mongo-go
+  ports:
+    - protocol: TCP
+      port: 27017
+      targetPort: 27017
+  type: ClusterIP # Expose MongoDB only within the cluster
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-person-api-sqlite-deployment
+spec:
+  replicas: 1 # Adjust as needed
+  selector:
+    matchLabels:
+      app: go-person-api-sqlite
+  template:
+    metadata:
+      labels:
+        app: go-person-api-sqlite
+    spec:
+      containers:
+        - name: go-person-api-sqlite
+          image: go-person-api-service:latest # Assumes image is available (e.g., built locally and loaded, or from a registry)
+          # imagePullPolicy: Always # Or IfNotPresent, depending on your image update strategy
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GIN_MODE
+              value: "release"
+            - name: PORT
+              value: "8080"
+            - name: PERSON_REPO_BACKEND
+              value: "sqlite"
+            - name: SQLITE_DB_PATH
+              value: "db/persons_k8s.db" # Ephemeral SQLite DB inside the pod
+          # If SQLite data needs to be persisted, add a PVC and volumeMount here.
+          # For simplicity, keeping it ephemeral like other language examples might.
+          # volumeMounts:
+          #   - name: sqlite-db-storage
+          #     mountPath: /app/db
+      # volumes:
+      #   - name: sqlite-db-storage
+      #     persistentVolumeClaim:
+      #       claimName: sqlite-pvc-go # Define this PVC if you need persistence
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-person-api-sqlite-service
+spec:
+  selector:
+    app: go-person-api-sqlite
+  ports:
+    - protocol: TCP
+      port: 80 # Service port inside the cluster
+      targetPort: 8080 # Container port
+      nodePort: 30090 # External port (example, choose an available one)
+  type: NodePort
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-person-api-mongo-deployment
+spec:
+  replicas: 1 # Adjust as needed
+  selector:
+    matchLabels:
+      app: go-person-api-mongo
+  template:
+    metadata:
+      labels:
+        app: go-person-api-mongo
+    spec:
+      containers:
+        - name: go-person-api-mongo
+          image: go-person-api-service:latest # Reuses the same image
+          # imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: GIN_MODE
+              value: "release"
+            - name: PORT
+              value: "8080"
+            - name: PERSON_REPO_BACKEND
+              value: "mongo"
+            - name: MONGO_URI # Points to the internal MongoDB service
+              value: "mongodb://mongo-service-go:27017/person_k8s_db_go"
+            - name: MONGO_DB # DB name used by the application with MongoDB
+              value: "person_k8s_db_go"
+      # No explicit volumes needed here as MongoDB is external to this pod
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-person-api-mongo-service
+spec:
+  selector:
+    app: go-person-api-mongo
+  ports:
+    - protocol: TCP
+      port: 80 # Service port inside the cluster
+      targetPort: 8080 # Container port
+      nodePort: 30091 # External port (example, choose an available one, different from SQLite version)
+  type: NodePort
+
+# Notes:
+# 1. Image Name: 'go-person-api-service:latest' is used. Ensure this image is built and
+#    available to your Kubernetes cluster (e.g., by pushing to Docker Hub, GCR, ECR, or
+#    using a local registry if your K8s setup supports it like Minikube's `eval $(minikube docker-env)`).
+#    For local testing with Minikube/Kind, you might build locally and not push.
+# 2. NodePorts: 30090 and 30091 are example NodePorts. These must be within the valid
+#    NodePort range (typically 30000-32767) and available on your K8s nodes.
+# 3. MongoDB PVC: Requires a default StorageClass or a specified `storageClassName`.
+# 4. Credentials: For production MongoDB, use Kubernetes Secrets for usernames/passwords
+#    and mount them as environment variables or files.
+#
+# To deploy: kubectl apply -f k8s.yaml
+# Access SQLite API (example): http://<K8S_NODE_IP>:30090/health
+# Access MongoDB API (example): http://<K8S_NODE_IP>:30091/health

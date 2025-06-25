@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  go-person-api-sqlite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-person-api-service:latest
+    container_name: go-person-api-sqlite
+    ports:
+      - "8080:8080" # Exposes Go service on host port 8080
+    environment:
+      - GIN_MODE=release
+      - PORT=8080
+      - PERSON_REPO_BACKEND=sqlite
+      - SQLITE_DB_PATH=db/persons_compose.db # Use a different DB file for compose
+    volumes:
+      - ./db_compose_sqlite:/app/db # Mount a volume for SQLite data persistence
+      # For development, you might want to mount your source code:
+      # - .:/app
+      # Ensure your Dockerfile handles this (e.g., by not re-copying if files exist)
+      # or use a development-specific Dockerfile stage.
+      # For production-like testing, building the image as-is is better.
+    profiles:
+      - sqlite
+    restart: unless-stopped
+
+  go-person-api-mongo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: go-person-api-service:latest # Can reuse the same image
+    container_name: go-person-api-mongo
+    ports:
+      - "8081:8080" # Exposes Go service on host port 8081 (to avoid conflict with sqlite version if run together)
+    environment:
+      - GIN_MODE=release
+      - PORT=8080 # Internal port for the app
+      - PERSON_REPO_BACKEND=mongo
+      - MONGO_URI=mongodb://mongo_db_go:27017/person_app_db # Connect to the mongo service below
+      - MONGO_DB=person_app_db
+    depends_on:
+      - mongo_db_go
+    profiles:
+      - mongo
+    restart: unless-stopped
+
+  mongo_db_go:
+    image: mongo:6
+    container_name: mongo_db_go_person_service
+    ports:
+      - "27018:27017" # Expose MongoDB on host port 27018 (to avoid conflict if other mongo instances run)
+    volumes:
+      - mongo_data_go:/data/db # Persistent data for MongoDB
+    environment:
+      # MONGO_INITDB_ROOT_USERNAME: user # Optional: if you need auth
+      # MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: person_app_db # Optional: creates this db on init
+    profiles:
+      - mongo
+    restart: unless-stopped
+
+volumes:
+  mongo_data_go: # Defines the named volume for MongoDB
+  db_compose_sqlite: # Defines the named volume for SQLite
+
+# To run:
+# For SQLite: docker-compose --profile sqlite up --build
+# For MongoDB: docker-compose --profile mongo up --build
+#
+# Access SQLite API at: http://localhost:8080/health (or other endpoints)
+# Access MongoDB API at: http://localhost:8081/health (or other endpoints)
+# Access MongoDB directly at: mongodb://localhost:27018/ (if you need to inspect)
